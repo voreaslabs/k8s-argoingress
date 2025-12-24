@@ -66,6 +66,40 @@ spec:
     tags:
       Name: argocd-server-sg
 ---
+apiVersion: ec2.aws.upbound.io/v1beta1
+kind: SecurityGroupIngressRule
+metadata:
+  name: allow-alb-to-argocd
+spec:
+  forProvider:
+    region: us-east-1
+    # Port 8082 is what your controller uses, 8080 for the server
+    fromPort: 80
+    toPort: 8080
+    ipProtocol: tcp
+    # Points to the SG we just created
+    securityGroupIdSelector:
+      matchLabels:
+        # Crossplane automatically adds this name to the SG labels
+        crossplane.io/external-name: argocd-server-fargate-sg
+    # Source: Allow from within your VPC (or specific VPN CIDR)
+    cidrIpv4: 10.0.0.0/16 
+---
+apiVersion: ec2.aws.upbound.io/v1beta1
+kind: SecurityGroupEgressRule
+metadata:
+  name: allow-all-outbound
+spec:
+  forProvider:
+    region: us-east-1
+    ipProtocol: "-1" # -1 means "all protocols"
+    fromPort: -1
+    toPort: -1
+    cidrIpv4: 0.0.0.0/0
+    securityGroupIdSelector:
+      matchLabels:
+        crossplane.io/external-name: argocd-server-fargate-sg
+---
 # ===============================================================
 # 5. INTERNAL INGRESS (ArgoCD URL via VPN)
 # ===============================================================
@@ -82,7 +116,6 @@ spec:
         name: argocd-server-ingress
         namespace: argocd
         annotations:
-          # Sets ALB to Internal (Private Subnets)
           alb.ingress.kubernetes.io/scheme: internal
           alb.ingress.kubernetes.io/target-type: ip
           alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
